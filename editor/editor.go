@@ -963,7 +963,7 @@ func initialize() error {
 func Editor(file string) {
 
 	if err := enableRawMode(); err != nil {
-		fmt.Fprintf(os.Stderr, "cannotenable raw mode %s", err)
+		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
 		safeExit(err)
 	}
 
