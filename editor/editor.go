@@ -1,9 +1,5 @@
 /*
 	Editor is a simple terminal editor.
-
-	TODO(go) Read https://dave.cheney.net/practical-go/presentations/gophercon-singapore-2019.html and apply naming rules etc on the code.
-	TODO(go) Add error wrappers - I'm not sure but I think this is part of the core language these days. I have to investigate that. But
-	I hope so beacuse I don't want to avoid external packages.
 */
 
 package editor
