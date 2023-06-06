@@ -1,4 +1,4 @@
-module github.com/pergus/editor
+module github.com/pergus/editor/editor
 
 go 1.18
 
