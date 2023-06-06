@@ -1,8 +1,9 @@
 package main
 
 import (
-	. "github.com/pergus/editor/editor"
 	"os"
+
+	. "github.com/pergus/editor"
 )
 
 func main() {
