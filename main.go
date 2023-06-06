@@ -1,7 +1,7 @@
 package main
 
 import (
-	. "editor/editor"
+	. "github.com/pergus/editor/editor"
 	"os"
 )
 
