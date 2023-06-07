@@ -93,7 +93,7 @@ func windowSize() (int, int, error) {
 	return int(ws.Row), int(ws.Col), nil
 }
 
-func safeExit(userError error) {
+func cleanupBeforeExit() {
 
 	clearScreen()
 	err := disableRawMode()
@@ -101,13 +101,6 @@ func safeExit(userError error) {
 		fmt.Fprintf(os.Stderr, "error disable raw mode %s", err)
 		os.Exit(1)
 	}
-
-	if userError != nil {
-		fmt.Fprintf(os.Stderr, "%s", userError)
-		os.Exit(1)
-	}
-
-	os.Exit(0)
 }
 
 func resizeWindow() {
@@ -230,7 +223,10 @@ func prompt(prompt string) string {
 	for {
 		setStatusMsg(prompt, input)
 		refreshScreen()
-		k := readKey()
+		k, err := readKey()
+		if err != nil {
+			return fmt.Sprintf("%v", err)
+		}
 
 		if k == kDelete || k == ctrlKey('h') || k == kBackSpace {
 			if len(input) > 0 {
@@ -288,7 +284,10 @@ func find() {
 findLoop:
 	for {
 		refreshScreen()
-		k := readKey()
+		k, err := readKey()
+		if err != nil {
+			break findLoop
+		}
 		switch k {
 		case kArrowDown, kArrowRight:
 			point++
@@ -658,7 +657,7 @@ func rawReadKey() (byte, error) {
 	}
 }
 
-func readKey() int {
+func readKey() (int, error) {
 
 	for {
 		key, err := rawReadKey()
@@ -666,57 +665,60 @@ func readKey() int {
 		case err == errNoInput:
 			continue
 		case err == io.EOF:
-			safeExit(nil)
+			return 0, err
 		case err != nil:
-			safeExit(fmt.Errorf("reading key %s", err))
+			return 0, fmt.Errorf("reading key %s", err)
 		case key == '\x1b': // escape character 27
 			esc0, err := rawReadKey()
 			if err == errNoInput {
-				return '\x1b'
+				return '\x1b', nil
 			}
 			if err != nil {
-				return 0
+				return 0, err
 			}
 			esc1, err := rawReadKey()
 			if err == errNoInput {
-				return '\x1b'
+				return '\x1b', err
 			}
 			if err != nil {
-				return 0
+				return 0, err
 			}
 
 			if esc0 == '[' {
 				if esc1 >= '0' && esc1 <= '9' {
 					esc2, err := rawReadKey()
 					if err == errNoInput {
-						return '\x1b'
+						return '\x1b', err
 					}
 					if esc2 == '~' {
 						switch esc1 {
 						case '5':
-							return kPageUp // fn+kArrowUp
+							return kPageUp, nil // fn+kArrowUp
 						case '6':
-							return kPageDown // fn+kArrowDown
+							return kPageDown, nil // fn+kArrowDown
 						case '3':
-							return kDelete
+							return kDelete, nil
 						}
 					}
 					if esc2 == ';' {
 						esc3, err1 := rawReadKey()
 						esc4, err2 := rawReadKey()
-						if err1 == errNoInput || err2 == errNoInput {
-							return '\x1b'
+						if err1 == errNoInput {
+							return '\x1b', err1
+						}
+						if err2 == errNoInput {
+							return '\x1b', err2
 						}
 						if esc3 == '2' {
 							switch esc4 { // shift + arrow keys
 							case 'A':
-								return kArrowUp
+								return kArrowUp, nil
 							case 'B':
-								return kArrowDown
+								return kArrowDown, nil
 							case 'D':
-								return kArrowLeft
+								return kArrowLeft, nil
 							case 'C':
-								return kArrowRight
+								return kArrowRight, nil
 							}
 						}
 					}
@@ -724,17 +726,17 @@ func readKey() int {
 				} else {
 					switch {
 					case esc1 == 'A':
-						return kArrowUp
+						return kArrowUp, nil
 					case esc1 == 'B':
-						return kArrowDown
+						return kArrowDown, nil
 					case esc1 == 'C':
-						return kArrowRight
+						return kArrowRight, nil
 					case esc1 == 'D':
-						return kArrowLeft
+						return kArrowLeft, nil
 					case esc1 == 'H':
-						return kHome // fn+kArrowLeft
+						return kHome, nil // fn+kArrowLeft
 					case esc1 == 'F':
-						return kEnd // fn+kArrowRight
+						return kEnd, nil // fn+kArrowRight
 					}
 				}
 			}
@@ -742,35 +744,39 @@ func readKey() int {
 		case key == 195: // swedish characters
 			esc1, err := rawReadKey()
 			if err == errNoInput {
-				return '\x1b'
+				return '\x1b', err
 			}
 			if err != nil {
-				return 0
+				return 0, err
 			}
 
 			switch {
 			case esc1 == 165:
-				return 'å'
+				return 'å', nil
 			case esc1 == 164:
-				return 'ä'
+				return 'ä', nil
 			case esc1 == 182:
-				return 'ö'
+				return 'ö', nil
 			case esc1 == 133:
-				return 'Å'
+				return 'Å', nil
 			case esc1 == 132:
-				return 'Ä'
+				return 'Ä', nil
 			case esc1 == 150:
-				return 'Ö'
+				return 'Ö', nil
 			}
 
 		default:
-			return int(key)
+			return int(key), nil
 		}
 	}
 }
 
-func processKey() error {
-	k := readKey()
+func processKey() (bool, error) {
+	k, err := readKey()
+
+	if err != nil {
+		return true, err
+	}
 
 	switch k {
 	case '\r': // enter
@@ -780,9 +786,9 @@ func processKey() error {
 		if editor.dirty && !editor.quitComfirm {
 			setStatusMsg("There are unsaved changes. Press ctrl-q to quit or ctrl-s to save.")
 			editor.quitComfirm = true
-			return nil
+			return false, nil
 		}
-		safeExit(nil)
+		return true, nil
 
 	case kArrowDown, kArrowLeft, kArrowRight, kArrowUp:
 		moveCursor(k)
@@ -859,7 +865,7 @@ func processKey() error {
 		}
 	}
 
-	return nil
+	return false, nil
 }
 
 /*-----------------------------------------------------------------------------
@@ -960,27 +966,32 @@ func initialize() error {
  * Editor API
  */
 
-func Editor(file string) {
+func Editor(file string) error {
 
 	if err := enableRawMode(); err != nil {
 		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
-		safeExit(err)
+		return err
 	}
 
 	if err := initialize(); err != nil {
-		safeExit(err)
+		return err
 	}
 
 	if file != "" {
 		if err := openFile(file); err != nil {
-			safeExit(err)
+			return err
 		}
 	}
 
 	for {
 		refreshScreen()
-		if err := processKey(); err != nil {
-			safeExit(err)
+		exit_editor, err := processKey()
+		if err != nil {
+			return err
+		}
+		if exit_editor {
+			cleanupBeforeExit()
+			return nil
 		}
 	}
 }
