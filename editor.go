@@ -979,6 +979,7 @@ func Editor(file string) error {
 
 	if file != "" {
 		if err := openFile(file); err != nil {
+			cleanupBeforeExit()
 			return err
 		}
 	}
