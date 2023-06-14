@@ -1,6 +1,5 @@
 package editor
 
-
 import (
 	"golang.org/x/sys/unix"
 )
@@ -46,4 +45,3 @@ func disableRawMode() error {
 
 	return nil
 }
-

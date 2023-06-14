@@ -93,8 +93,24 @@ func windowSize() (int, int, error) {
 	return int(ws.Row), int(ws.Col), nil
 }
 
-func cleanupBeforeExit() {
+func clearTerminal() {
+	scrBuf := bytes.Buffer{} // screen buffer
 
+	fmt.Fprint(&scrBuf, "\x1b[?25l") // hide cursor
+	fmt.Fprint(&scrBuf, "\x1b[H")    // cursor top-left corner
+
+	for y := 0; y <= editor.termRows+1; y++ {
+		fmt.Fprintf(&scrBuf, "\x1b[K") // clear to end of line
+		fmt.Fprint(&scrBuf, "\r\n")
+	}
+
+	fmt.Fprint(&scrBuf, "\x1b[?25h") // show cursor
+
+	os.Stdout.Write(scrBuf.Bytes()) // write screen buffer to stdout
+}
+
+func cleanupBeforeExit() {
+	clearTerminal()
 	clearScreen()
 	err := disableRawMode()
 	if err != nil {
@@ -988,6 +1004,7 @@ func Editor(file string) error {
 		refreshScreen()
 		exit_editor, err := processKey()
 		if err != nil {
+			cleanupBeforeExit()
 			return err
 		}
 		if exit_editor {
