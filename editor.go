@@ -103,7 +103,7 @@ func clearTerminal() {
 		fmt.Fprintf(&scrBuf, "\x1b[K") // clear to end of line
 		fmt.Fprint(&scrBuf, "\r\n")
 	}
-
+	fmt.Fprint(&scrBuf, "\x1b[H")    // cursor top-left corner
 	fmt.Fprint(&scrBuf, "\x1b[?25h") // show cursor
 
 	os.Stdout.Write(scrBuf.Bytes()) // write screen buffer to stdout
@@ -111,7 +111,6 @@ func clearTerminal() {
 
 func cleanupBeforeExit() {
 	clearTerminal()
-	clearScreen()
 	err := disableRawMode()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error disable raw mode %s", err)
