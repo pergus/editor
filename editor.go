@@ -353,13 +353,13 @@ func searchPoints(row int, str string, substr string) []point {
  * Screen Operations
  */
 
-func clearScreen() {
-	scrBuf := bytes.Buffer{}
-
-	fmt.Fprint(&scrBuf, "\x1b[2J") // clear screen
-	fmt.Fprint(&scrBuf, "\x1b[H")  // cursor top-left corner
-	os.Stdout.Write(scrBuf.Bytes())
-}
+//func clearScreen() {
+//	scrBuf := bytes.Buffer{}
+//
+//	fmt.Fprint(&scrBuf, "\x1b[2J") // clear screen
+//	fmt.Fprint(&scrBuf, "\x1b[H")  // cursor top-left corner
+//	os.Stdout.Write(scrBuf.Bytes())
+//}
 
 func computeRx(row []rune, x int) int {
 	rx := 0
