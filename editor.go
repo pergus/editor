@@ -786,7 +786,7 @@ func readKey() (int, error) {
 	}
 }
 
-func processKey() (bool, error) {
+func processKey(readonly bool) (bool, error) {
 	k, err := readKey()
 
 	if err != nil {
@@ -795,6 +795,9 @@ func processKey() (bool, error) {
 
 	switch k {
 	case '\r': // enter
+		if readonly {
+			break
+		}
 		insertNewLine()
 
 	case ctrlKey('q'): // quit editor
@@ -832,13 +835,23 @@ func processKey() (bool, error) {
 		}
 
 	case kBackSpace:
+		if readonly {
+			break
+		}
 		deleteChar()
 
 	case kDelete, ctrlKey('h'):
+		if readonly {
+			break
+		}
 		moveCursor(kArrowRight)
 		deleteChar()
 
 	case ctrlKey('k'):
+		if readonly {
+			break
+		}
+
 		for {
 			if editor.cursor.x >= len(editor.lines[editor.cursor.y].chars) {
 				break
@@ -851,30 +864,51 @@ func processKey() (bool, error) {
 		break
 
 	case ctrlKey('s'):
+		if readonly {
+			break
+		}
 		save()
 
 	case ctrlKey('f'):
 		find()
 
 	case ')':
+		if readonly {
+			break
+		}
 		insertChar(k)
 		matchParenthesis('(', ')')
 
 	case '}':
+		if readonly {
+			break
+		}
 		insertChar(k)
 		matchParenthesis('{', '}')
 
 	case ']':
+		if readonly {
+			break
+		}
 		insertChar(k)
 		matchParenthesis('[', ']')
 
 	case 'å', 'ä', 'ö', 'Å', 'Ä', 'Ö':
+		if readonly {
+			break
+		}
 		insertChar(k)
 
 	case '\t':
+		if readonly {
+			break
+		}
 		insertChar(k)
 
 	default:
+		if readonly {
+			break
+		}
 		if unicode.IsPrint(rune(k)) {
 			insertChar(k)
 		}
@@ -981,7 +1015,7 @@ func initialize() error {
  * Editor API
  */
 
-func Editor(file string) error {
+func Editor(file string, readonly bool) error {
 
 	if err := enableRawMode(); err != nil {
 		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
@@ -1001,7 +1035,7 @@ func Editor(file string) error {
 
 	for {
 		refreshScreen()
-		exit_editor, err := processKey()
+		exit_editor, err := processKey(readonly)
 		if err != nil {
 			cleanupBeforeExit()
 			return err
