@@ -994,7 +994,7 @@ func initialize(readonly bool) error {
 	editor.statusMsgTimeout = 3
 	if readonly {
 		setStatusMsg("Press ctrl+q to exit.")
-	}else {
+	} else {
 		setStatusMsg("Press ctrl+q to exit. Press ctrl+s to save.")
 	}
 
@@ -1035,6 +1035,54 @@ func Editor(file string, readonly bool) error {
 			cleanupBeforeExit()
 			return err
 		}
+	}
+
+	for {
+		refreshScreen()
+		exit_editor, err := processKey(readonly)
+		if err != nil {
+			cleanupBeforeExit()
+			return err
+		}
+		if exit_editor {
+			cleanupBeforeExit()
+			return nil
+		}
+	}
+}
+
+func openData(data []byte) error {
+	editor.lines = []line{}
+	reader := bytes.NewReader(data)
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		insertRow(len(editor.lines), scanner.Text())
+	}
+	editor.fileName = "memory" // or set to something meaningful
+	editor.dirty = false
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func EditorFromData(data []byte, readonly bool) error {
+
+	if err := enableRawMode(); err != nil {
+		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
+		return err
+	}
+
+	if err := initialize(readonly); err != nil {
+		return err
+	}
+
+	if err := openData(data); err != nil {
+		cleanupBeforeExit()
+		return err
 	}
 
 	for {
