@@ -365,7 +365,7 @@ func computeRx(row []rune, x int) int {
 	rx := 0
 	for i := 0; i < x; i++ {
 		if row[i] == '\t' {
-			rx = (rx + editor.tabStop - 1) - (rx % editor.tabStop)
+			rx = rx + editor.tabStop - 1
 		}
 		rx++
 	}
