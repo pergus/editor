@@ -987,12 +987,16 @@ func openFile(name string) error {
  * Initialize editor
  */
 
-func initialize() error {
+func initialize(readonly bool) error {
 
 	resizeWindow()
 	editor.tabStop = 4
 	editor.statusMsgTimeout = 3
-	setStatusMsg("Press ctrl+q to exit | ctrl+s to save")
+	if readonly {
+		setStatusMsg("Press ctrl+q to exit.")
+	}else {
+		setStatusMsg("Press ctrl+q to exit. Press ctrl+s to save.")
+	}
 
 	/* Handle resize window signals */
 	editor.signals = make(chan os.Signal, 1)
@@ -1022,7 +1026,7 @@ func Editor(file string, readonly bool) error {
 		return err
 	}
 
-	if err := initialize(); err != nil {
+	if err := initialize(readonly); err != nil {
 		return err
 	}
 
