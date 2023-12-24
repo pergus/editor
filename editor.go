@@ -984,6 +984,28 @@ func openFile(name string) error {
 }
 
 /*-----------------------------------------------------------------------------
+ * Open Data
+ */
+
+func openData(data []byte) error {
+	editor.lines = []line{}
+	reader := bytes.NewReader(data)
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		insertRow(len(editor.lines), scanner.Text())
+	}
+	editor.fileName = "memory" // or set to something meaningful
+	editor.dirty = false
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+/*-----------------------------------------------------------------------------
  * Initialize editor
  */
 
@@ -1019,7 +1041,7 @@ func initialize(readonly bool) error {
  * Editor API
  */
 
-func Editor(file string, readonly bool) error {
+func Editor(source interface{}, readonly bool) error {
 
 	if err := enableRawMode(); err != nil {
 		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
@@ -1030,59 +1052,21 @@ func Editor(file string, readonly bool) error {
 		return err
 	}
 
-	if file != "" {
-		if err := openFile(file); err != nil {
+	switch src := source.(type) {
+	case string: // File source
+		if src != "" {
+			if err := openFile(src); err != nil {
+				cleanupBeforeExit()
+				return err
+			}
+		}
+	case []byte: // Data source
+		if err := openData(src); err != nil {
 			cleanupBeforeExit()
 			return err
 		}
-	}
-
-	for {
-		refreshScreen()
-		exit_editor, err := processKey(readonly)
-		if err != nil {
-			cleanupBeforeExit()
-			return err
-		}
-		if exit_editor {
-			cleanupBeforeExit()
-			return nil
-		}
-	}
-}
-
-func openData(data []byte) error {
-	editor.lines = []line{}
-	reader := bytes.NewReader(data)
-
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		insertRow(len(editor.lines), scanner.Text())
-	}
-	editor.fileName = "memory" // or set to something meaningful
-	editor.dirty = false
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func EditorFromData(data []byte, readonly bool) error {
-
-	if err := enableRawMode(); err != nil {
-		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
-		return err
-	}
-
-	if err := initialize(readonly); err != nil {
-		return err
-	}
-
-	if err := openData(data); err != nil {
-		cleanupBeforeExit()
-		return err
+	default:
+		return fmt.Errorf("unsupported source type")
 	}
 
 	for {
