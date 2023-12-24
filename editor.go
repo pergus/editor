@@ -116,6 +116,7 @@ func cleanupBeforeExit() {
 		fmt.Fprintf(os.Stderr, "error disable raw mode %s", err)
 		os.Exit(1)
 	}
+	editor.signals <- syscall.SIGABRT
 }
 
 func resizeWindow() {
@@ -1012,6 +1013,8 @@ func openData(data []byte) error {
 func initialize(readonly bool) error {
 
 	resizeWindow()
+	editor.cursor.x = 0
+	editor.cursor.y = 0
 	editor.tabStop = 4
 	editor.statusMsgTimeout = 3
 	if readonly {
@@ -1027,6 +1030,8 @@ func initialize(readonly bool) error {
 	go func() {
 		for s := range editor.signals {
 			switch s {
+			case syscall.SIGABRT:
+				return
 			case syscall.SIGWINCH:
 				resizeWindow()
 				refreshScreen()
