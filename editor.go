@@ -7,6 +7,7 @@ package editor
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -76,6 +77,15 @@ const (
 	kEnd        = 1007
 	kDelete     = 1008
 )
+
+var keymap map[int]string
+
+type KeyCombo struct {
+	Ctrl  bool
+	Alt   bool
+	Shift bool
+	Key   rune // or int for special keys
+}
 
 /*-----------------------------------------------------------------------------
  * Terminal operations
@@ -263,6 +273,18 @@ func prompt(prompt string) string {
 }
 
 /*-----------------------------------------------------------------------------
+ * Open File
+ */
+
+func open_file() {
+	file := prompt("Open file: %s")
+	err := openFile(file)
+	if err != nil {
+		setStatusMsg("Failed to open file %s", file)
+	}
+}
+
+/*-----------------------------------------------------------------------------
  * Find
  */
 
@@ -353,14 +375,6 @@ func searchPoints(row int, str string, substr string) []point {
 /*-----------------------------------------------------------------------------
  * Screen Operations
  */
-
-//func clearScreen() {
-//	scrBuf := bytes.Buffer{}
-//
-//	fmt.Fprint(&scrBuf, "\x1b[2J") // clear screen
-//	fmt.Fprint(&scrBuf, "\x1b[H")  // cursor top-left corner
-//	os.Stdout.Write(scrBuf.Bytes())
-//}
 
 func computeRx(row []rune, x int) int {
 	rx := 0
@@ -655,7 +669,7 @@ func deleteChar() {
 }
 
 /*-----------------------------------------------------------------------------
- * Handle user input
+ * Handle user input & key map
  */
 
 func rawReadKey() (byte, error) {
@@ -787,38 +801,121 @@ func readKey() (int, error) {
 	}
 }
 
-func processKey(readonly bool) (bool, error) {
-	k, err := readKey()
-
-	if err != nil {
-		return true, err
+func parseKeyCombo(s string) (KeyCombo, error) {
+	var kc KeyCombo
+	parts := strings.Split(strings.ToLower(s), "+")
+	for _, p := range parts {
+		switch p {
+		case "ctrl":
+			kc.Ctrl = true
+		case "alt":
+			kc.Alt = true
+		case "shift":
+			kc.Shift = true
+		case "up":
+			kc.Key = kArrowUp
+		case "down":
+			kc.Key = kArrowDown
+		case "left":
+			kc.Key = kArrowLeft
+		case "right":
+			kc.Key = kArrowRight
+		case "pageup":
+			kc.Key = kPageUp
+		case "pagedown":
+			kc.Key = kPageDown
+		case "home":
+			kc.Key = kHome
+		case "end":
+			kc.Key = kEnd
+		case "backspace":
+			kc.Key = kBackSpace
+		case "delete":
+			kc.Key = kDelete
+		default:
+			if len(p) == 1 {
+				kc.Key = rune(p[0])
+			} else {
+				return kc, fmt.Errorf("unknown key part: %s", p)
+			}
+		}
 	}
+	return kc, nil
+}
 
-	switch k {
-	case '\r': // enter
-		if readonly {
-			break
+func keyComboToInt(kc KeyCombo) int {
+	if kc.Ctrl && kc.Key >= 'a' && kc.Key <= 'z' {
+		return ctrlKey(byte(kc.Key))
+	}
+	// Extend for Alt, Shift, special keys as needed
+	return int(kc.Key)
+}
+
+func loadKeymap(filename string) error {
+	var rawmap map[string]string
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &rawmap); err != nil {
+		return err
+	}
+	keymap = make(map[int]string)
+	for keystr, cmd := range rawmap {
+		kc, err := parseKeyCombo(keystr)
+		if err != nil {
+			return fmt.Errorf("error parsing key %s: %v", keystr, err)
 		}
-		insertNewLine()
+		kint := keyComboToInt(kc)
+		keymap[kint] = cmd
+	}
+	return nil
+}
 
-	case ctrlKey('q'): // quit editor
-		if editor.dirty && !editor.quitComfirm {
-			setStatusMsg("There are unsaved changes. Press ctrl-q to quit or ctrl-s to save.")
-			editor.quitComfirm = true
-			return false, nil
+var actionDispatch = map[string]func(readonly bool){
+	"quit": func(_ bool) { editor.quitComfirm = true },
+	"help": func(_ bool) { help() },
+	"save": func(readonly bool) {
+		if !readonly {
+			save()
 		}
-		return true, nil
-
-	case kArrowDown, kArrowLeft, kArrowRight, kArrowUp:
-		moveCursor(k)
-
-	case kPageUp:
+	},
+	"find":       func(_ bool) { find() },
+	"line_start": func(_ bool) { editor.cursor.x = 0 },
+	"line_end": func(_ bool) {
+		if editor.cursor.y < len(editor.lines) {
+			editor.cursor.x = len(editor.lines[editor.cursor.y].chars)
+		}
+	},
+	"delete_forward": func(readonly bool) {
+		if !readonly {
+			moveCursor(kArrowRight)
+			deleteChar()
+		}
+	},
+	"kill_line": func(readonly bool) {
+		if !readonly {
+			for {
+				if editor.cursor.x >= len(editor.lines[editor.cursor.y].chars) {
+					break
+				}
+				moveCursor(kArrowRight)
+				deleteChar()
+			}
+		}
+	},
+	"open_file":    func(_ bool) { open_file() },
+	"cursor_up":    func(_ bool) { moveCursor(kArrowUp) },
+	"cursor_down":  func(_ bool) { moveCursor(kArrowDown) },
+	"cursor_left":  func(_ bool) { moveCursor(kArrowLeft) },
+	"cursor_right": func(_ bool) { moveCursor(kArrowRight) },
+	"page_up": func(_ bool) {
 		editor.cursor.y = editor.fileY
 		for i := 0; i < editor.termRows; i++ {
 			moveCursor(kArrowUp)
 		}
-
-	case kPageDown:
+	},
+	"page_down": func(_ bool) {
 		editor.cursor.y = editor.fileY + editor.termRows - 1
 		if editor.cursor.y > len(editor.lines) {
 			editor.cursor.y = len(editor.lines)
@@ -826,96 +923,60 @@ func processKey(readonly bool) (bool, error) {
 		for i := 0; i < editor.termRows; i++ {
 			moveCursor(kArrowDown)
 		}
+	},
+}
 
-	case ctrlKey('a'), kHome:
-		editor.cursor.x = 0
+func processKey(readonly bool) (bool, error) {
+	k, err := readKey()
+	if err != nil {
+		return true, err
+	}
 
-	case ctrlKey('e'), kEnd:
-		if editor.cursor.y < len(editor.lines) {
-			editor.cursor.x = len(editor.lines[editor.cursor.y].chars)
-		}
+	action, exists := keymap[k]
 
-	case kBackSpace:
-		if readonly {
-			break
-		}
-		deleteChar()
-
-	case kDelete, ctrlKey('h'):
-		if readonly {
-			break
-		}
-		moveCursor(kArrowRight)
-		deleteChar()
-
-	case ctrlKey('k'):
-		if readonly {
-			break
-		}
-
-		for {
-			if editor.cursor.x >= len(editor.lines[editor.cursor.y].chars) {
-				break
-			}
-			moveCursor(kArrowRight)
+	switch {
+	case !exists || action == "":
+		// fallback behavior for unbound key
+		if unicode.IsPrint(rune(k)) && !readonly {
+			insertChar(k)
+		} else if k == '\r' && !readonly {
+			insertNewLine()
+		} else if k == ')' && !readonly {
+			insertChar(k)
+			matchParenthesis('(', ')')
+		} else if k == '}' && !readonly {
+			insertChar(k)
+			matchParenthesis('{', '}')
+		} else if k == ']' && !readonly {
+			insertChar(k)
+			matchParenthesis('[', ']')
+		} else if k == '\t' && !readonly {
+			insertChar(k)
+		} else if k == kBackSpace && !readonly {
 			deleteChar()
 		}
-
-	case ctrlKey('l'), '\x1b':
-		break
-
-	case ctrlKey('s'):
-		if readonly {
-			break
+	case action == "quit":
+		if editor.dirty && !editor.quitComfirm {
+			setStatusMsg("There are unsaved changes. Press ctrl-q to quit or ctrl-s to save.")
+			editor.quitComfirm = true
+			return false, nil
 		}
-		save()
-
-	case ctrlKey('f'):
-		find()
-
-	case ')':
-		if readonly {
-			break
-		}
-		insertChar(k)
-		matchParenthesis('(', ')')
-
-	case '}':
-		if readonly {
-			break
-		}
-		insertChar(k)
-		matchParenthesis('{', '}')
-
-	case ']':
-		if readonly {
-			break
-		}
-		insertChar(k)
-		matchParenthesis('[', ']')
-
-	case 'å', 'ä', 'ö', 'Å', 'Ä', 'Ö':
-		if readonly {
-			break
-		}
-		insertChar(k)
-
-	case '\t':
-		if readonly {
-			break
-		}
-		insertChar(k)
-
+		return true, nil
 	default:
-		if readonly {
-			break
-		}
-		if unicode.IsPrint(rune(k)) {
-			insertChar(k)
+		if f, ok := actionDispatch[action]; ok {
+			f(readonly)
 		}
 	}
 
 	return false, nil
+}
+
+/*-----------------------------------------------------------------------------
+ * Help
+ */
+
+func help() {
+	// Todo
 }
 
 /*-----------------------------------------------------------------------------
@@ -1010,13 +1071,18 @@ func openData(data []byte) error {
  * Initialize editor
  */
 
-func initialize(readonly bool) error {
+func initialize(readonly bool, keymapPath string) error {
 
 	resizeWindow()
 	editor.cursor.x = 0
 	editor.cursor.y = 0
 	editor.tabStop = 4
 	editor.statusMsgTimeout = 3
+
+	if err := loadKeymap(keymapPath); err != nil {
+		return fmt.Errorf("failed to load keymap: %w", err)
+	}
+
 	if readonly {
 		setStatusMsg("Press ctrl+q to exit.")
 	} else {
@@ -1046,14 +1112,14 @@ func initialize(readonly bool) error {
  * Editor API
  */
 
-func Editor(source interface{}, readonly bool) error {
+func Editor(source interface{}, readonly bool, keymapPath string) error {
 
 	if err := enableRawMode(); err != nil {
 		fmt.Fprintf(os.Stderr, "can not enable raw mode %s", err)
 		return err
 	}
 
-	if err := initialize(readonly); err != nil {
+	if err := initialize(readonly, keymapPath); err != nil {
 		return err
 	}
 

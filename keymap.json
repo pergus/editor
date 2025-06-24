@@ -1,0 +1,18 @@
+{
+    "ctrl+q": "quit",
+    "ctrl+s": "save",
+    "ctrl+f": "find",
+    "ctrl+a": "line_start",
+    "ctrl+e": "line_end",
+    "ctrl+h": "delete_forward",
+    "ctrl+k": "kill_line",
+    "ctrl+o": "open_file",
+    "up": "cursor_up",
+    "down": "cursor_down",
+    "left": "cursor_left",
+    "right": "cursor_right",
+    "pageup": "page_up",
+    "pagedown": "page_down",
+    "home": "cursor_home",
+    "end": "cursor_end"
+}
